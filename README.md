@@ -33,7 +33,7 @@ Extensions
 Or from the command line:
 
 ```bash
-code --install-extension vcpkg-feature-selector-<version>.vsix
+code --install-extension vcpkg-cmake-feature-selector-<version>.vsix
 ```
 
 ## Requirements
@@ -724,13 +724,13 @@ vsce package --readme-path README.marketplace.md
 The command creates a file named similar to:
 
 ```text
-vcpkg-feature-selector-<version>.vsix
+vcpkg-cmake-feature-selector-<version>.vsix
 ```
 
 The resulting package can be installed with:
 
 ```bash
-code --install-extension vcpkg-feature-selector-<version>.vsix
+code --install-extension vcpkg-cmake-feature-selector-<version>.vsix
 ```
 
 ## Current Limitations

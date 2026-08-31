@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 - 2026-08-31
+
+- Changed the Marketplace extension identifier from `vcpkg-feature-selector` to `vcpkg-cmake-feature-selector` because the previous identifier was already reserved by an earlier Marketplace publication.
+- No functional changes.
+
 ## 0.1.0 - 2026-08-31
 
 - Changed the project license to the Boost Software License 1.0.
