@@ -1,0 +1,4 @@
+*.vsix
+build/
+example/.vscode/
+example/CMakeUserPresets.json

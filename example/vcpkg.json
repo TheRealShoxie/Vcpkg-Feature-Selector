@@ -1,0 +1,12 @@
+{
+  "name": "vcpkg-feature-selector-example",
+  "version-string": "0.1.0",
+  "features": {
+    "gui": {
+      "description": "Enable optional Dear ImGui support",
+      "dependencies": [
+        "imgui"
+      ]
+    }
+  }
+}

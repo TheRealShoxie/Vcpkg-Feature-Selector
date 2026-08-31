@@ -1,0 +1,48 @@
+{
+  "name": "vcpkg-feature-selector",
+  "displayName": "vcpkg Feature Selector",
+  "description": "Select vcpkg manifest features for CMake-based workspaces.",
+  "version": "0.0.2",
+  "publisher": "omar-fkdelvotec",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true,
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+    "keywords": [
+    "vcpkg",
+    "cmake",
+    "dependencies",
+    "manifest",
+    "features"
+  ],
+  "contributes": {
+    "commands": [
+      {
+      "command": "vcpkgFeatureSelector.selectFeatures",
+      "title": "vcpkg: Select Manifest Features"
+      }
+    ],
+    "configuration": {
+      "title": "vcpkg Feature Selector",
+      "properties": {
+        "vcpkgFeatureSelector.environmentFeatures": {
+            "type": "string",
+            "default": "",
+            "scope": "machine",
+            "description": "vcpkg manifest features applied when the extension starts in this environment. Use 'none' for no optional features and separate multiple features with ';'. Leave empty to preserve the existing selection."
+        }
+      }
+    }
+  },
+  "main": "./src/extension.js",
+  "extensionDependencies": [
+    "ms-vscode.cmake-tools"
+  ],
+  "activationEvents": [
+    "workspaceContains:vcpkg.json"
+  ]
+}
