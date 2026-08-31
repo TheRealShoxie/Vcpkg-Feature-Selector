@@ -9,9 +9,6 @@ The extension intentionally uses the project-facing CMake cache variable `BUILD_
 ## Installation
 
 
-Replace it with:
-
-```md
 ### Visual Studio Marketplace
 
 The extension is available on the Visual Studio Marketplace:
