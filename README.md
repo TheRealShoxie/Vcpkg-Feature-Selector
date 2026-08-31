@@ -8,11 +8,17 @@ The extension intentionally uses the project-facing CMake cache variable `BUILD_
 
 ## Installation
 
+
+Replace it with:
+
+```md
 ### Visual Studio Marketplace
 
-The extension is intended to be published to the Visual Studio Marketplace.
+The extension is available on the Visual Studio Marketplace:
 
-Once published, install it from the Extensions view in VS Code by searching for:
+[vcpkg CMake Feature Selector](https://marketplace.visualstudio.com/items?itemName=TheRealShoxie.vcpkg-cmake-feature-selector)
+
+It can also be installed directly from the Extensions view in VS Code by searching for:
 
 ```text
 vcpkg CMake Feature Selector
