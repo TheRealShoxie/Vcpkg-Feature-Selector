@@ -2,8 +2,9 @@
   "name": "vcpkg-feature-selector",
   "displayName": "vcpkg Feature Selector",
   "description": "Select vcpkg manifest features for CMake-based workspaces.",
-  "version": "0.0.2",
-  "publisher": "omar-fkdelvotec",
+  "icon": "images/icon.png",
+  "version": "0.1.0",
+  "publisher": "TheRealShoxie",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "repository": {

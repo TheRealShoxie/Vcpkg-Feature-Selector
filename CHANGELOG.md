@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-08-31
 
 - Changed the project license to the Boost Software License 1.0.
 - Added installation and VSIX packaging documentation.
 - Added documented CMake integration from `BUILD_VCPKG_FEATURES` to `VCPKG_MANIFEST_FEATURES`.
 - Added a standalone public CMake/vcpkg example using an optional Dear ImGui feature.
 - Made the extension development launch configuration self-contained.
+- Added an extension icon for the Visual Studio Marketplace.
 
 ## 0.0.2
 
