@@ -1,4 +1,4 @@
-# vcpkg Feature Selector
+# vcpkg CMake Feature Selector
 
 Select optional vcpkg manifest features for a CMake-based workspace directly from VS Code.
 
