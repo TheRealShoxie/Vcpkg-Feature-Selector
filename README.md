@@ -713,10 +713,12 @@ Then test the extension:
 
 ### Creating a VSIX
 
-The extension can be packaged with Microsoft's `vsce` tool:
+The extension can be packaged with Microsoft's `vsce` tool.
+
+Because the repository uses a separate README for the Visual Studio Marketplace, package the extension with:
 
 ```bash
-vsce package
+vsce package --readme-path README.marketplace.md
 ```
 
 The command creates a file named similar to:

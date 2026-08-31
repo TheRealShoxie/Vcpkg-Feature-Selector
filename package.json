@@ -6,6 +6,14 @@
   "publisher": "omar-fkdelvotec",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheRealShoxie/Vcpkg-Feature-Selector.git"
+  },
+  "homepage": "https://github.com/TheRealShoxie/Vcpkg-Feature-Selector#readme",
+  "bugs": {
+    "url": "https://github.com/TheRealShoxie/Vcpkg-Feature-Selector/issues"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
