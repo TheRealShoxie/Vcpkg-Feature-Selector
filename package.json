@@ -1,9 +1,9 @@
 {
   "name": "vcpkg-cmake-feature-selector",
-  "displayName": "vcpkg Feature Selector",
+  "displayName": "vcpkg CMake Feature Selector",
   "description": "Select vcpkg manifest features for CMake-based workspaces.",
   "icon": "images/icon.png",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "TheRealShoxie",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
@@ -36,7 +36,7 @@
       }
     ],
     "configuration": {
-      "title": "vcpkg Feature Selector",
+      "title": "vcpkg CMake Feature Selector",
       "properties": {
         "vcpkgFeatureSelector.environmentFeatures": {
             "type": "string",

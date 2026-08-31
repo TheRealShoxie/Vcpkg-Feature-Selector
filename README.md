@@ -1,4 +1,4 @@
-# vcpkg Feature Selector
+# vcpkg CMake Feature Selector
 
 A small VS Code extension for selecting optional vcpkg manifest features used by a CMake-based workspace.
 
@@ -15,7 +15,7 @@ The extension is intended to be published to the Visual Studio Marketplace.
 Once published, install it from the Extensions view in VS Code by searching for:
 
 ```text
-vcpkg Feature Selector
+vcpkg CMake Feature Selector
 ```
 
 ### VSIX
