@@ -1,8 +1,18 @@
 const vscode = require("vscode");
 
-const CMAKE_FEATURE_ARGUMENT_PREFIX =
-    "-DBUILD_VCPKG_FEATURES=";
-    
+const {
+    CMAKE_FEATURE_COMMAND_ARGUMENT,
+    GET_SELECTED_FEATURES_COMMAND,
+    SELECTED_FEATURES_STATE_KEY,
+    areFeatureSelectionsEqual,
+    buildIntegratedConfigureArgs,
+    hasCurrentCMakeIntegration,
+    normalizeFeatures,
+    readLegacyFeatures,
+    resolveInitialFeatures,
+    serializeFeatures
+} = require("./featureState");
+
 /**
  * Converts an unknown thrown value into a readable message.
  *
@@ -15,31 +25,6 @@ function getErrorMessage(error) {
     }
 
     return String(error);
-}
-
-/**
- * Normalizes a configured feature value into a sorted feature array.
- *
- * @param {unknown} value
- * @returns {string[]}
- */
-function normalizeFeatures(value) {
-    let features = [];
-
-    if (Array.isArray(value)) {
-        features = value;
-    } else if (typeof value === "string") {
-        features = value.split(";");
-    }
-
-    return [...new Set(
-        features
-            .map(feature => feature.trim())
-            .filter(feature =>
-                feature !== "" &&
-                feature !== "none"
-            )
-    )].sort();
 }
 
 /**
@@ -75,53 +60,54 @@ function readEnvironmentFeatures() {
 }
 
 /**
- * Reads the currently configured vcpkg features from CMake Tools.
+ * Reads the persisted extension-owned feature selection.
  *
- * @param {vscode.WorkspaceFolder} workspaceFolder
- * @returns {string[]}
+ * @param {vscode.ExtensionContext} context
+ * @returns {string[] | undefined}
  */
-function readConfiguredFeatures(workspaceFolder) {
-    const configuration =
-        vscode.workspace.getConfiguration(
-            "cmake",
-            workspaceFolder.uri
+function readPersistedFeatures(context) {
+    const persistedFeatures =
+        context.workspaceState.get(
+            SELECTED_FEATURES_STATE_KEY
         );
 
-    const configureArgs =
-        configuration.get("configureArgs", []);
-
-    const featureArgument =
-        [...configureArgs]
-            .reverse()
-            .find(argument =>
-                typeof argument === "string" &&
-                argument.startsWith(
-                    CMAKE_FEATURE_ARGUMENT_PREFIX
-                )
-            );
-
-    if (!featureArgument) {
-        return [];
+    if (persistedFeatures === undefined) {
+        return undefined;
     }
 
     return normalizeFeatures(
-        featureArgument.slice(
-            CMAKE_FEATURE_ARGUMENT_PREFIX.length
-        )
+        persistedFeatures
     );
 }
 
-
 /**
- * Writes the selected vcpkg features to CMake Tools.
+ * Persists the active feature selection without modifying workspace files.
  *
- * @param {vscode.WorkspaceFolder} workspaceFolder
+ * @param {vscode.ExtensionContext} context
  * @param {string[]} selectedFeatures
  */
-async function writeConfiguredFeatures(
-    workspaceFolder,
+async function writePersistedFeatures(
+    context,
     selectedFeatures
 ) {
+    await context.workspaceState.update(
+        SELECTED_FEATURES_STATE_KEY,
+        selectedFeatures
+    );
+}
+
+/**
+ * Reads the configure arguments from the configuration scope that this
+ * extension manages.
+ *
+ * @param {vscode.WorkspaceFolder} workspaceFolder
+ * @returns {{
+ *   configuration: vscode.WorkspaceConfiguration,
+ *   configurationTarget: vscode.ConfigurationTarget,
+ *   configureArgs: unknown[]
+ * }}
+ */
+function readCMakeConfigureState(workspaceFolder) {
     const configuration =
         vscode.workspace.getConfiguration(
             "cmake",
@@ -156,30 +142,43 @@ async function writeConfiguredFeatures(
                 )
             ];
 
-    const unrelatedConfigureArgs =
-        configureArgs.filter(argument =>
-            !(
-                typeof argument === "string" &&
-                argument.startsWith(
-                    CMAKE_FEATURE_ARGUMENT_PREFIX
-                )
-            )
-        );
+    return {
+        configuration,
+        configurationTarget,
+        configureArgs
+    };
+}
 
-    const featureValue =
-        selectedFeatures.length === 0
-            ? "none"
-            : selectedFeatures.join(";");
+/**
+ * Ensures that CMake Tools obtains BUILD_VCPKG_FEATURES from the extension
+ * command rather than from a mutable workspace value.
+ *
+ * Existing literal BUILD_VCPKG_FEATURES arguments are migrated while all
+ * unrelated configure arguments are preserved.
+ *
+ * @param {ReturnType<typeof readCMakeConfigureState>} configureState
+ * @returns {Promise<boolean>} true when the CMake setting was changed
+ */
+async function ensureCMakeIntegration(
+    configureState
+) {
+    if (
+        hasCurrentCMakeIntegration(
+            configureState.configureArgs
+        )
+    ) {
+        return false;
+    }
 
-    unrelatedConfigureArgs.push(
-        `${CMAKE_FEATURE_ARGUMENT_PREFIX}${featureValue}`
-    );
-
-    await configuration.update(
+    await configureState.configuration.update(
         "configureArgs",
-        unrelatedConfigureArgs,
-        configurationTarget
+        buildIntegratedConfigureArgs(
+            configureState.configureArgs
+        ),
+        configureState.configurationTarget
     );
+
+    return true;
 }
 
 /**
@@ -349,7 +348,7 @@ async function selectFeatures(
         .map(item => item.label)
         .filter(feature => feature !== "none");
 
-    return [...new Set(features)].sort();
+    return normalizeFeatures(features);
 }
 
 /**
@@ -369,6 +368,28 @@ async function activate(context) {
     let manifestUsable = false;
     let selectorUnavailableMessage =
         "vcpkg Feature Selector is not available in the current workspace";
+
+    const persistedFeatures =
+        readPersistedFeatures(context);
+
+    const environmentFeatures =
+        readEnvironmentFeatures();
+
+    let selectedFeatures =
+        resolveInitialFeatures({
+            environmentFeatures,
+            persistedFeatures
+        });
+
+    const getSelectedFeaturesCommand =
+        vscode.commands.registerCommand(
+            GET_SELECTED_FEATURES_COMMAND,
+            () => serializeFeatures(selectedFeatures)
+        );
+
+    context.subscriptions.push(
+        getSelectedFeaturesCommand
+    );
 
     const selectFeaturesCommand =
         vscode.commands.registerCommand(
@@ -467,44 +488,64 @@ async function activate(context) {
         return;
     }
 
-    let availableFeatures = [];
-    let selectedFeatures = readConfiguredFeatures(workspaceFolder);
-    let environmentSelectionChanged = false;
+    const configureState =
+        readCMakeConfigureState(workspaceFolder);
 
-    const environmentFeatures =
-        readEnvironmentFeatures();
+    const legacyFeatures =
+        readLegacyFeatures(
+            configureState.configureArgs
+        );
 
-    if (
+    const previousFeatures =
+        resolveInitialFeatures({
+            persistedFeatures,
+            legacyFeatures
+        });
+
+    selectedFeatures =
+        resolveInitialFeatures({
+            environmentFeatures,
+            persistedFeatures,
+            legacyFeatures
+        });
+
+    const environmentSelectionChanged =
         environmentFeatures !== undefined &&
         !areFeatureSelectionsEqual(
             environmentFeatures,
-            selectedFeatures
-        )
-    ) {
-        try {
-            await writeConfiguredFeatures(
-                workspaceFolder,
-                environmentFeatures
+            previousFeatures
+        );
+
+    try {
+        await ensureCMakeIntegration(
+            configureState
+        );
+
+        if (
+            persistedFeatures === undefined ||
+            !areFeatureSelectionsEqual(
+                selectedFeatures,
+                persistedFeatures
+            )
+        ) {
+            await writePersistedFeatures(
+                context,
+                selectedFeatures
             );
-
-            selectedFeatures =
-                environmentFeatures;
-
-            environmentSelectionChanged = true;
-        } catch (error) {
-            selectorUnavailableMessage =
-                "Failed to apply environment vcpkg features: " +
-                getErrorMessage(error);
-
-            statusBarItem.text =
-                "$(error) $(package)";
-
-            statusBarItem.tooltip =
-                selectorUnavailableMessage;
-
-            statusBarItem.show();
-            return;
         }
+    } catch (error) {
+        selectorUnavailableMessage =
+            "Failed to initialize vcpkg feature selection: " +
+            getErrorMessage(error);
+
+        statusBarItem.text =
+            "$(error) $(package)";
+
+        statusBarItem.tooltip =
+            selectorUnavailableMessage;
+
+        statusBarItem.show();
+        return;
     }
 
     async function refreshManifestFeatures() {
@@ -535,6 +576,8 @@ async function activate(context) {
         }
     }
 
+    let availableFeatures = [];
+
     await refreshManifestFeatures();
 
     if (environmentSelectionChanged && manifestUsable) {
@@ -550,7 +593,6 @@ async function activate(context) {
             );
         }
     }
-
 
     selectFeaturesHandler =
         async () => {
@@ -573,8 +615,8 @@ async function activate(context) {
             }
 
             try {
-                await writeConfiguredFeatures(
-                    workspaceFolder,
+                await writePersistedFeatures(
+                    context,
                     selection
                 );
             } catch (error) {
@@ -585,6 +627,14 @@ async function activate(context) {
 
                 return;
             }
+
+            selectedFeatures = selection;
+
+            updateStatusBar(
+                statusBarItem,
+                selectedFeatures,
+                availableFeatures
+            );
 
             try {
                 await vscode.commands.executeCommand(
@@ -633,50 +683,7 @@ async function activate(context) {
         manifestWatcher
     );
 
-    const configurationChangeListener =
-        vscode.workspace.onDidChangeConfiguration(
-            event => {
-                if (
-                    !event.affectsConfiguration(
-                        "cmake.configureArgs",
-                        workspaceFolder.uri
-                    )
-                ) {
-                    return;
-                }
-
-                selectedFeatures =
-                    readConfiguredFeatures(
-                        workspaceFolder
-                    );
-
-                if (!manifestUsable) {
-                    return;
-                }
-
-                updateStatusBar(
-                    statusBarItem,
-                    selectedFeatures,
-                    availableFeatures
-                );
-            }
-        );
-
-    context.subscriptions.push(
-        configurationChangeListener
-    );
-
     statusBarItem.show();
-}
-
-function areFeatureSelectionsEqual(left, right) {
-    return (
-        left.length === right.length &&
-        left.every(
-            (feature, index) =>
-                feature === right[index]
-        )
-    );
 }
 
 /**
