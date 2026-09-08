@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-09-08
 
 - Store the active feature selection in extension-owned workspace state instead of a literal value in shared `cmake.configureArgs`.
 - Expose the active selection through the internal `vcpkgFeatureSelector.getSelectedFeatures` command and a stable CMake Tools `${command:...}` configure argument.
