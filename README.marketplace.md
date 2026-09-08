@@ -2,7 +2,7 @@
 
 Select optional vcpkg manifest features for a CMake-based workspace directly from VS Code.
 
-vcpkg Feature Selector reads the available features from the workspace root `vcpkg.json` and stores the selected feature set through CMake Tools in `cmake.configureArgs`.
+vcpkg Feature Selector reads the available features from the workspace root `vcpkg.json`, persists the active selection in extension-owned workspace state, and exposes it to CMake Tools through command substitution.
 
 ## Requirements
 
@@ -188,49 +188,39 @@ results in:
 VCPKG_MANIFEST_FEATURES=gui
 ```
 
-## CMake Tools Persistence
+## CMake Tools Integration and Persistence
 
-The selected feature set is persisted through:
+The active feature selection is persisted in extension-owned VS Code `workspaceState` instead of as a literal feature value in `.vscode/settings.json`.
+
+CMake Tools receives the current selection through one stable managed argument:
 
 ```json
 "cmake.configureArgs": [
-  "-DBUILD_VCPKG_FEATURES=gui"
+  "-DBUILD_VCPKG_FEATURES=${command:vcpkgFeatureSelector.getSelectedFeatures}"
 ]
 ```
 
-The extension manages only arguments beginning with:
+On first activation, the extension installs this stable integration argument if necessary. Other CMake configure arguments are preserved, and switching features afterward does not rewrite this setting.
+
+The extension is declared as a workspace extension. Independent Remote / Dev Container environments that mount the same source checkout can therefore maintain independent selected feature state instead of racing through a shared literal feature value in `.vscode/settings.json`.
+
+### Migration from 0.1.2 and Earlier
+
+Earlier versions stored a literal value such as:
 
 ```text
--DBUILD_VCPKG_FEATURES=
+-DBUILD_VCPKG_FEATURES=gui;tests
 ```
 
-Other CMake configure arguments are preserved.
+in `cmake.configureArgs`.
 
-For example:
+On first activation after upgrading, if no extension-owned state exists yet, that legacy value is retained as the selected feature state and the managed argument is replaced by the stable command-substitution form. Unrelated CMake configure arguments are preserved.
 
-```json
-"cmake.configureArgs": [
-  "-DSOME_OPTION=ON",
-  "-DBUILD_VCPKG_FEATURES=none"
-]
-```
-
-becomes:
-
-```json
-"cmake.configureArgs": [
-  "-DSOME_OPTION=ON",
-  "-DBUILD_VCPKG_FEATURES=gui"
-]
-```
-
-when `gui` is selected.
+After migration, use the selector or `environmentFeatures` to control the VS Code extension. Terminal and CI builds can continue to pass `-DBUILD_VCPKG_FEATURES=...` directly to CMake.
 
 ## Environment-specific Feature Selection
 
-A development environment can define the feature set that should be active when the extension starts.
-
-This is configured through:
+A development environment can define the feature set that should be active when the extension starts:
 
 ```json
 "vcpkgFeatureSelector.environmentFeatures": "gui"
@@ -242,19 +232,19 @@ Multiple features can be specified using a CMake-style list:
 "vcpkgFeatureSelector.environmentFeatures": "gui;tests"
 ```
 
-To explicitly select no optional features, use:
+To explicitly select no optional features:
 
 ```json
 "vcpkgFeatureSelector.environmentFeatures": "none"
 ```
 
-Leaving the setting empty means that the environment does not override the persisted feature selection:
+Leaving the setting empty preserves the persisted extension state:
 
 ```json
 "vcpkgFeatureSelector.environmentFeatures": ""
 ```
 
-When a non-empty environment feature selection is configured, the extension updates the managed `-DBUILD_VCPKG_FEATURES=...` entry and requests a clean configure only when the configured value differs from the persisted selection.
+A non-empty environment selection overrides persisted state during activation and requests a clean configure only when the active value changes. The setting has machine scope, making it suitable for environment-specific configuration such as Dev Containers.
 
 ## Configure Behavior
 
@@ -288,7 +278,7 @@ The tooltip shows the selected feature names.
 
 If a configured feature no longer exists in `vcpkg.json`, the status bar shows a warning.
 
-The extension does not silently remove the missing feature from the CMake configuration.
+The extension does not silently remove the missing feature from the active selection.
 
 ### Error State
 
@@ -308,6 +298,15 @@ A multi-root workspace is supported only when exactly one workspace folder conta
 
 When multiple root manifests are detected, the extension enters an error state instead of choosing one implicitly.
 
+## Command-line / CI Builds
+
+The extension is only a VS Code convenience layer. Terminal and CI builds do not depend on extension state and can configure directly:
+
+```bash
+cmake --preset <preset-name> \
+    -DBUILD_VCPKG_FEATURES='gui;tests'
+```
+
 ## Limitations
 
 The following are currently not handled:
@@ -315,6 +314,7 @@ The following are currently not handled:
 - multiple root `vcpkg.json` manifests
 - dynamic rescanning when workspace folders are added or removed after extension activation
 - automatic correction of stale CMake package-cache state caused by manual changes to `vcpkg.json`
+- external manual changes to literal `BUILD_VCPKG_FEATURES` configure arguments after migration
 
 ## License
 

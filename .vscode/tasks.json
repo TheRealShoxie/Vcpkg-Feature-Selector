@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Test extension",
+      "type": "npm",
+      "script": "test:all",
+      "problemMatcher": [],
+      "group": "test"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 A small VS Code extension for selecting optional vcpkg manifest features used by a CMake-based workspace.
 
-The extension reads the available features directly from the workspace root `vcpkg.json` and stores the selected feature set in the CMake Tools `cmake.configureArgs` setting.
+The extension reads the available features directly from the workspace root `vcpkg.json`, stores the active selection in extension-owned workspace state, and exposes it to CMake Tools through command substitution.
 
 The extension intentionally uses the project-facing CMake cache variable `BUILD_VCPKG_FEATURES`. The consuming CMake project maps that value to vcpkg's `VCPKG_MANIFEST_FEATURES` before `project()` is called.
 
@@ -96,7 +96,7 @@ gui
 tests
 ```
 
-is stored as:
+is exposed to CMake Tools as:
 
 ```text
 -DBUILD_VCPKG_FEATURES=gui;tests
@@ -119,7 +119,7 @@ none
 
 It means that no optional vcpkg manifest features are explicitly selected through the extension.
 
-It is stored as:
+It is exposed to CMake Tools as:
 
 ```text
 -DBUILD_VCPKG_FEATURES=none
@@ -165,9 +165,11 @@ The intended integration is:
 ```text
 VS Code
     ↓
-vcpkg Feature Selector
+vcpkg Feature Selector workspace state
     ↓
-cmake.configureArgs
+vcpkgFeatureSelector.getSelectedFeatures
+    ↓
+cmake.configureArgs command substitution
     ↓
 BUILD_VCPKG_FEATURES
     ↓
@@ -243,15 +245,19 @@ results in:
 VCPKG_MANIFEST_FEATURES=gui
 ```
 
-### CMake Tools Persistence
+### CMake Tools Integration and Persistence
 
-The selected feature set is persisted through:
+The active feature selection is persisted in extension-owned VS Code `workspaceState` instead of as a literal feature value in `.vscode/settings.json`.
+
+CMake Tools receives the selection through one stable managed argument:
 
 ```json
 "cmake.configureArgs": [
-  "-DBUILD_VCPKG_FEATURES=gui"
+  "-DBUILD_VCPKG_FEATURES=${command:vcpkgFeatureSelector.getSelectedFeatures}"
 ]
 ```
+
+On first activation, the extension installs this stable integration argument if it is not already present. After that, changing the selected features updates only extension-owned state and does not rewrite `cmake.configureArgs`.
 
 The extension manages only arguments beginning with:
 
@@ -266,24 +272,49 @@ For example:
 ```json
 "cmake.configureArgs": [
   "-DSOME_OPTION=ON",
-  "-DBUILD_VCPKG_FEATURES=none"
+  "-DBUILD_VCPKG_FEATURES=${command:vcpkgFeatureSelector.getSelectedFeatures}"
 ]
 ```
 
-becomes:
+remains unchanged when a different feature set is selected. CMake Tools evaluates the command substitution during configure and receives the current feature value from the extension.
+
+The internal command:
+
+```text
+vcpkgFeatureSelector.getSelectedFeatures
+```
+
+returns `none` or the normalized semicolon-separated feature list. It is hidden from the Command Palette.
+
+The persisted workspace state survives closing and reopening the same workspace when `vcpkgFeatureSelector.environmentFeatures` is empty.
+
+The extension is declared as a workspace extension. In Remote / Dev Container scenarios it therefore runs in the workspace extension host, allowing independent remote environments that mount the same source checkout to keep independent selected feature state without rewriting a shared `.vscode/settings.json` on every selection change.
+
+#### Migration from 0.1.2 and Earlier
+
+Earlier releases persisted a literal feature value directly in `cmake.configureArgs`, for example:
 
 ```json
 "cmake.configureArgs": [
   "-DSOME_OPTION=ON",
-  "-DBUILD_VCPKG_FEATURES=gui"
+  "-DBUILD_VCPKG_FEATURES=gui;tests"
 ]
 ```
 
-when `gui` is selected.
+On first activation after upgrading, if no extension-owned feature state exists yet, the extension uses the last legacy literal `BUILD_VCPKG_FEATURES` value as the persisted selection and replaces all managed literal feature arguments with the stable command-substitution argument.
 
-The workspace CMake configuration is treated as the persistent source of truth for the selected feature set unless the current development environment defines an environment-specific feature selection.
+The example above becomes:
 
-Changes made externally to `cmake.configureArgs` are detected and reflected in the status bar.
+```json
+"cmake.configureArgs": [
+  "-DSOME_OPTION=ON",
+  "-DBUILD_VCPKG_FEATURES=${command:vcpkgFeatureSelector.getSelectedFeatures}"
+]
+```
+
+The effective selection remains `gui;tests`, and unrelated configure arguments are preserved.
+
+After migration, external changes to literal `-DBUILD_VCPKG_FEATURES=...` entries are no longer treated as another source of truth. Use the selector, `environmentFeatures`, or pass `-DBUILD_VCPKG_FEATURES` directly when configuring outside VS Code.
 
 ## Environment-specific Feature Selection
 
@@ -319,21 +350,19 @@ To explicitly select no optional features, use:
 "vcpkgFeatureSelector.environmentFeatures": "none"
 ```
 
-Leaving the setting empty means that the environment does not override the persisted feature selection:
+Leaving the setting empty means that the environment does not override the persisted extension state:
 
 ```json
 "vcpkgFeatureSelector.environmentFeatures": ""
 ```
 
-When a non-empty environment feature selection is configured, the extension compares it with the currently persisted CMake feature selection when the extension starts.
+The setting has machine scope, which makes it suitable for environment-specific configuration such as Dev Containers.
 
-If they differ, the extension updates the managed `-DBUILD_VCPKG_FEATURES=...` entry in `cmake.configureArgs` and requests a clean CMake configure.
+When a non-empty environment feature selection is configured, it is applied during extension activation. If it differs from the previously persisted selection, the extension saves the environment selection and requests one clean CMake configure.
 
-If they are already equal, no configuration change or additional clean configure is requested.
+If it is already equal, no additional clean configure is requested.
 
-This allows different development environments to establish their intended vcpkg feature set while keeping the interactive feature selector and the normal workspace persistence mechanism.
-
-Because the environment selection is applied when the extension starts, reloading or reopening the VS Code window also restores the feature set declared by the environment.
+Because the environment selection is applied when the extension starts, reloading or reopening the VS Code window restores the feature set declared by the environment. An empty environment selection instead preserves the previously persisted interactive selection.
 
 ## Configure Behavior
 
@@ -371,7 +400,7 @@ Changes to the manifest automatically refresh:
 
 Restarting the extension is therefore not required after editing feature definitions.
 
-The manifest watcher does not modify the selected CMake feature configuration.
+The manifest watcher does not modify the selected feature state.
 
 ## Status Bar
 
@@ -399,9 +428,9 @@ The tooltip shows the selected feature names.
 
 If a configured feature no longer exists in `vcpkg.json`, the status bar shows a warning.
 
-The extension does not silently remove the missing feature from the CMake configuration.
+The extension does not silently remove the missing feature from the active selection.
 
-The configuration changes only after the user explicitly selects a new feature set.
+The selection changes only after the user explicitly selects a new feature set.
 
 ### Error State
 
@@ -413,7 +442,7 @@ The extension shows an error state when it cannot operate correctly, for example
 - CMake Tools is not installed
 - more than one root manifest is found in a multi-root workspace
 
-Errors caused directly by a user selection, such as failing to update `cmake.configureArgs` or failing to invoke the CMake clean-configure command, are also shown as VS Code error notifications.
+Errors caused directly by a user selection, such as failing to persist the selected features or failing to invoke the CMake clean-configure command, are also shown as VS Code error notifications.
 
 ## Multi-root Workspaces
 
@@ -519,7 +548,7 @@ the `gui` manifest feature is selected and Dear ImGui is available to the CMake 
 
 ## Development
 
-The extension is implemented in JavaScript and does not require an npm or TypeScript build step for development.
+The extension is implemented in JavaScript and does not require a TypeScript build step for development. Automated tests use Node.js' built-in test runner and have no third-party test-framework dependency.
 
 The repository contains the standalone example project used by the Extension Development Host:
 
@@ -533,7 +562,11 @@ vcpkg-feature-selector/
 │   ├── main.cpp
 │   └── vcpkg.json
 ├── src/
-│   └── extension.js
+│   ├── extension.js
+│   └── featureState.js
+├── test/
+│   ├── extension.test.js
+│   └── featureState.test.js
 ├── CHANGELOG.md
 ├── LICENSE
 ├── package.json
@@ -542,7 +575,12 @@ vcpkg-feature-selector/
 
 ### Development and Test Prerequisites
 
-Testing the included example requires:
+Running the automated extension tests requires:
+
+- Node.js 20 or newer
+- npm
+
+Testing the included CMake example additionally requires:
 
 - CMake
 - Ninja
@@ -597,6 +635,32 @@ export VCPKG_ROOT="$HOME/vcpkg"
 ```
 
 or create a local user preset as shown below.
+
+### Automated Extension Tests
+
+Run the dependency-free regression tests with:
+
+```bash
+npm test
+```
+
+Run syntax checks with:
+
+```bash
+npm run test:syntax
+```
+
+Run the complete automated suite with:
+
+```bash
+npm run test:all
+```
+
+The tests cover normalization, `none` handling, legacy migration, preservation of unrelated CMake arguments, environment/persisted-state precedence, clean-configure behavior, manifest refresh behavior, internal command availability, and independent selection state for two extension contexts sharing the same CMake settings.
+
+The VS Code Extension Development Host launch configuration uses `npm run test:all` as a pre-launch task, so pressing `F5` starts the development host only after the automated regression suite passes.
+
+GitHub Actions runs the same regression suite on Node.js 20 and 22 for pushes and pull requests. No dependency installation is required for the test suite.
 
 ### Testing the Example from the Command Line
 
@@ -678,11 +742,11 @@ This file should remain untracked.
 
 Open the repository in VS Code.
 
-When using WSL, make sure the Microsoft CMake Tools extension is installed in the WSL environment.
+When using WSL or a Dev Container, make sure the Microsoft CMake Tools extension is installed in the same workspace environment as the extension under development.
 
 Press `F5`.
 
-The Extension Development Host opens the repository's `example` workspace.
+The automated regression suite runs first. If it passes, the Extension Development Host opens the repository's `example` workspace.
 
 If you use a local user preset, select the `local` configure preset:
 
@@ -700,27 +764,36 @@ Then test the extension:
    vcpkg: Select Manifest Features
    ```
 3. Select `gui`.
-4. The extension updates:
+4. Verify CMake clean-configures with:
    ```text
-   -DBUILD_VCPKG_FEATURES=gui
+   BUILD_VCPKG_FEATURES=gui
    ```
-5. The extension triggers a clean configure.
+5. Verify the managed CMake Tools argument remains:
+   ```text
+   -DBUILD_VCPKG_FEATURES=${command:vcpkgFeatureSelector.getSelectedFeatures}
+   ```
 6. Build the example and verify that Dear ImGui is enabled.
-7. Switch back to `none`.
-8. Verify that the extension updates:
-   ```text
-   -DBUILD_VCPKG_FEATURES=none
-   ```
-9. Build again and verify that the optional GUI dependency is no longer active.
+7. Switch back to `none` and verify another clean configure with `BUILD_VCPKG_FEATURES=none`.
+8. Select the already active value and verify no additional clean configure is requested.
+9. Change a feature description in `example/vcpkg.json` and verify the selector refreshes without changing the active selection or requesting a clean configure.
+10. Remove the active feature from the manifest and verify the warning state; restore it and verify the warning clears.
+
+For Remote / Dev Container isolation, also test the same source checkout from two independent environments with different `vcpkgFeatureSelector.environmentFeatures` values. Changing the selection in environment A must not change environment B's selection or rewrite the shared feature value in `.vscode/settings.json`.
 
 ### Creating a VSIX
 
 The extension can be packaged with Microsoft's `vsce` tool.
 
+Run the complete regression suite before packaging:
+
+```bash
+npm run test:all
+```
+
 Because the repository uses a separate README for the Visual Studio Marketplace, package the extension with:
 
 ```bash
-vsce package --readme-path README.marketplace.md
+npm run package:vsix
 ```
 
 The command creates a file named similar to:
@@ -742,6 +815,7 @@ The following are currently not handled:
 - multiple root `vcpkg.json` manifests
 - dynamic rescanning when workspace folders are added or removed after extension activation
 - automatic correction of stale CMake package-cache state caused by manual changes to `vcpkg.json`
+- external manual changes to literal `BUILD_VCPKG_FEATURES` configure arguments after migration
 
 ## License
 

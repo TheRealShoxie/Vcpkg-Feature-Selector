@@ -21,7 +21,7 @@
   "categories": [
     "Other"
   ],
-    "keywords": [
+  "keywords": [
     "vcpkg",
     "cmake",
     "dependencies",
@@ -31,20 +31,32 @@
   "contributes": {
     "commands": [
       {
-      "command": "vcpkgFeatureSelector.selectFeatures",
-      "title": "vcpkg: Select Manifest Features"
+        "command": "vcpkgFeatureSelector.selectFeatures",
+        "title": "vcpkg: Select Manifest Features"
+      },
+      {
+        "command": "vcpkgFeatureSelector.getSelectedFeatures",
+        "title": "vcpkg: Get Selected Manifest Features"
       }
     ],
     "configuration": {
       "title": "vcpkg CMake Feature Selector",
       "properties": {
         "vcpkgFeatureSelector.environmentFeatures": {
-            "type": "string",
-            "default": "",
-            "scope": "machine",
-            "description": "vcpkg manifest features applied when the extension starts in this environment. Use 'none' for no optional features and separate multiple features with ';'. Leave empty to preserve the existing selection."
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "vcpkg manifest features applied when the extension starts in this environment. Use 'none' for no optional features and separate multiple features with ';'. Leave empty to preserve the existing selection."
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "vcpkgFeatureSelector.getSelectedFeatures",
+          "when": "false"
+        }
+      ]
     }
   },
   "main": "./src/extension.js",
@@ -52,6 +64,16 @@
     "ms-vscode.cmake-tools"
   ],
   "activationEvents": [
-    "workspaceContains:vcpkg.json"
+    "workspaceContains:vcpkg.json",
+    "onCommand:vcpkgFeatureSelector.getSelectedFeatures"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:syntax": "node --check src/featureState.js && node --check src/extension.js",
+    "test:all": "npm run test:syntax && npm test",
+    "package:vsix": "npx @vscode/vsce package --readme-path README.marketplace.md"
+  },
+  "extensionKind": [
+    "workspace"
   ]
 }

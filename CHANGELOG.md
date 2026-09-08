@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Store the active feature selection in extension-owned workspace state instead of a literal value in shared `cmake.configureArgs`.
+- Expose the active selection through the internal `vcpkgFeatureSelector.getSelectedFeatures` command and a stable CMake Tools `${command:...}` configure argument.
+- Preserve feature selections across workspace reopen when `environmentFeatures` is empty while keeping non-empty environment selections as startup overrides.
+- Isolate feature selections between independent Remote / Dev Container extension hosts sharing the same source checkout.
+- Migrate legacy literal `-DBUILD_VCPKG_FEATURES=...` configure arguments while preserving unrelated CMake configure arguments.
+- Preserve clean-configure behavior for interactive and environment-driven selection changes.
+- Preserve manifest watching, missing-feature warnings, `none` handling, sorting and duplicate removal.
+- Add dependency-free automated regression tests and run them automatically before launching the Extension Development Host.
+- Document persistence, migration, Dev Container isolation, command-line behavior and the development/test workflow.
+
 ## 0.1.2 - 2026-08-31
 
 - Changed the Marketplace display name to `vcpkg CMake Feature Selector` because the previous display name was already reserved by an earlier Marketplace publication.
